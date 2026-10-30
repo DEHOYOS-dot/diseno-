@@ -19,6 +19,13 @@ from utils.anova_utils import (
     tukey,
     validar_dca,
 )
+from utils.diagnostico_utils import (
+    grafico_qq,
+    grafico_residuos_vs_ajustados,
+    prueba_levene,
+    prueba_shapiro,
+    residuos_y_ajustados,
+)
 
 
 @st.cache_data
@@ -150,8 +157,8 @@ fila_tratamientos = anova.loc[anova["Fuente"] == "Tratamientos"].iloc[0]
 fila_error = anova.loc[anova["Fuente"] == "Error"].iloc[0]
 significativo = float(fila_tratamientos["p-valor"]) < alfa
 
-pestana_datos, pestana_anova, pestana_comparaciones, pestana_graficos = st.tabs(
-    ["Datos", "ANOVA", "Comparaciones", "Gráficos"]
+pestana_datos, pestana_anova, pestana_comparaciones, pestana_graficos, pestana_supuestos = st.tabs(
+    ["Datos", "ANOVA", "Comparaciones", "Gráficos", "Supuestos"]
 )
 
 with pestana_datos:
@@ -238,3 +245,64 @@ with pestana_graficos:
         },
     )
     st.plotly_chart(grafico_medias, width="stretch")
+
+with pestana_supuestos:
+    st.subheader("Diagnóstico de supuestos del DCA")
+    st.write(
+        "**Normalidad:** Shapiro-Wilk y el gráfico Q-Q revisan si los residuos "
+        "son compatibles con una distribución normal."
+    )
+    st.write(
+        "**Homogeneidad de varianzas:** Levene, centrada en las medianas, evalúa "
+        "si la variabilidad de la respuesta es similar entre tratamientos."
+    )
+    st.write(
+        "**Independencia:** no se determina con una prueba de estos datos; se "
+        "respalda principalmente con la asignación aleatoria de los tratamientos "
+        "y la ejecución independiente de las unidades experimentales."
+    )
+
+    diagnostico = residuos_y_ajustados(modelo)
+    shapiro_estadistico, shapiro_p, shapiro_conclusion = prueba_shapiro(
+        diagnostico["Residuos"], alfa
+    )
+    levene_estadistico, levene_p, levene_conclusion = prueba_levene(
+        datos,
+        columna_tratamiento,
+        columna_respuesta,
+        alfa,
+    )
+    tabla_supuestos = pd.DataFrame(
+        [
+            {
+                "Prueba": "Shapiro-Wilk",
+                "Supuesto": "Normalidad de los residuos",
+                "Estadístico": shapiro_estadistico,
+                "p-valor": shapiro_p,
+                "Conclusión": shapiro_conclusion,
+            },
+            {
+                "Prueba": "Levene (mediana)",
+                "Supuesto": "Homogeneidad de varianzas",
+                "Estadístico": levene_estadistico,
+                "p-valor": levene_p,
+                "Conclusión": levene_conclusion,
+            },
+        ]
+    )
+    st.dataframe(
+        tabla_supuestos.style.format(
+            {"Estadístico": "{:.4f}", "p-valor": "{:.4f}"}
+        ),
+        width="stretch",
+        hide_index=True,
+    )
+
+    col_grafico_residuos, col_grafico_qq = st.columns(2)
+    with col_grafico_residuos:
+        st.plotly_chart(
+            grafico_residuos_vs_ajustados(diagnostico),
+            width="stretch",
+        )
+    with col_grafico_qq:
+        st.plotly_chart(grafico_qq(diagnostico["Residuos"]), width="stretch")
